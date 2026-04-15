@@ -1,0 +1,7 @@
+{
+  "name": "Clapton trap - AI Security",
+  "description": "Real-time theft and fall detection using AI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
