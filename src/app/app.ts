@@ -23,6 +23,7 @@ interface SecurityEvent {
   description: string;
   confidence: number;
   imageUrl: string;
+  boundingBox?: [number, number, number, number];
 }
 
 @Component({
@@ -47,7 +48,12 @@ export class App implements OnDestroy {
 
   isMonitoring = signal(false);
   events = signal<SecurityEvent[]>([]);
+  archivedEvents = signal<SecurityEvent[]>([]);
+  showArchived = signal(false);
   latestEvent = computed(() => this.events()[0]);
+  currentDetection = signal<SecurityEvent | null>(null);
+  
+  displayEvents = computed(() => this.showArchived() ? this.archivedEvents() : this.events());
   
   private stream: MediaStream | null = null;
   private monitorInterval: ReturnType<typeof setInterval> | null = null;
@@ -187,6 +193,11 @@ Return a JSON object with 'type', 'description' (detailed explanation of hand mo
               confidence: {
                 type: Type.NUMBER,
                 description: "Confidence level of the detection, between 0 and 1."
+              },
+              boundingBox: {
+                type: Type.ARRAY,
+                items: { type: Type.NUMBER },
+                description: "Bounding box of the detected activity in [ymin, xmin, ymax, xmax] format, normalized to 0-1000. Required if type is not 'normal'."
               }
             },
             required: ['type', 'description', 'confidence']
@@ -198,7 +209,6 @@ Return a JSON object with 'type', 'description' (detailed explanation of hand mo
       if (resultText) {
         const result = JSON.parse(resultText);
         
-        // Only log non-normal events or high confidence suspicious events
         if (result.type !== 'normal' && result.confidence > 0.6) {
           const newEvent: SecurityEvent = {
             id: Math.random().toString(36).substring(2, 9),
@@ -206,14 +216,29 @@ Return a JSON object with 'type', 'description' (detailed explanation of hand mo
             type: result.type,
             description: result.description,
             confidence: result.confidence,
-            imageUrl: dataUrl
+            imageUrl: dataUrl,
+            boundingBox: result.boundingBox
           };
           
-          this.events.update(events => [newEvent, ...events].slice(0, 50)); // Keep last 50 events
+          this.currentDetection.set(newEvent);
+          
+          this.events.update(events => {
+            const updatedEvents = [newEvent, ...events];
+            if (updatedEvents.length > 20) {
+              const toArchive = updatedEvents.pop();
+              if (toArchive) {
+                this.archivedEvents.update(archived => [toArchive, ...archived].slice(0, 500));
+              }
+            }
+            return updatedEvents;
+          });
+        } else {
+          this.currentDetection.set(null);
         }
       }
     } catch (error) {
       console.error('Error analyzing frame:', error);
+      this.currentDetection.set(null);
     }
   }
   
@@ -233,5 +258,42 @@ Return a JSON object with 'type', 'description' (detailed explanation of hand mo
       case 'suspicious': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
+  }
+
+  toggleArchived() {
+    this.showArchived.update(show => !show);
+  }
+
+  clearArchive() {
+    this.archivedEvents.set([]);
+  }
+
+  getBoundingBoxStyle(box: [number, number, number, number] | undefined, type: string) {
+    if (!box || box.length !== 4) return { display: 'none' };
+    const [ymin, xmin, ymax, xmax] = box;
+    
+    let borderColor = 'rgba(239, 68, 68, 0.8)'; // red-500
+    let bgColor = 'rgba(239, 68, 68, 0.2)';
+    
+    if (type === 'suspicious') {
+      borderColor = 'rgba(234, 179, 8, 0.8)'; // yellow-500
+      bgColor = 'rgba(234, 179, 8, 0.2)';
+    } else if (type === 'fall') {
+      borderColor = 'rgba(249, 115, 22, 0.8)'; // orange-500
+      bgColor = 'rgba(249, 115, 22, 0.2)';
+    }
+
+    return {
+      top: `${ymin / 10}%`,
+      left: `${xmin / 10}%`,
+      height: `${(ymax - ymin) / 10}%`,
+      width: `${(xmax - xmin) / 10}%`,
+      position: 'absolute',
+      border: `3px solid ${borderColor}`,
+      backgroundColor: bgColor,
+      zIndex: 20,
+      borderRadius: '8px',
+      transition: 'all 0.3s ease-in-out'
+    };
   }
 }

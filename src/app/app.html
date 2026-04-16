@@ -37,9 +37,17 @@
         }
         
         @if (isMonitoring()) {
-          <div class="absolute top-6 left-6 flex items-center gap-3 bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-bold tracking-wider border border-white/10 shadow-lg">
+          <div class="absolute top-6 left-6 flex items-center gap-3 bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-bold tracking-wider border border-white/10 shadow-lg z-30">
             <div class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]"></div>
             LIVE AI ANALYSIS
+          </div>
+        }
+
+        @if (isMonitoring() && currentDetection() && currentDetection()!.boundingBox) {
+          <div [ngStyle]="getBoundingBoxStyle(currentDetection()!.boundingBox, currentDetection()!.type)">
+            <div class="absolute -top-8 left-0 px-2 py-1 rounded text-xs font-bold whitespace-nowrap border shadow-md" [ngClass]="getEventColor(currentDetection()!.type)">
+              {{ currentDetection()!.type | uppercase }} ({{ currentDetection()!.confidence | percent }})
+            </div>
           </div>
         }
       </div>
@@ -69,24 +77,44 @@
     <!-- Events Log Column -->
     <div class="w-full lg:w-[450px] flex flex-col gap-6">
       <div class="flex-grow flex flex-col bg-white shadow-xl rounded-3xl border border-gray-100 overflow-hidden h-[800px]">
-        <div class="border-b border-gray-100 p-6 bg-gray-50/50 z-10 flex items-center justify-between">
-          <h2 class="font-bold text-xl flex items-center gap-3 text-gray-800">
-            <mat-icon class="text-gray-500">history</mat-icon>
-            Incident Log
-          </h2>
-          <span class="bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1 rounded-full">{{ events().length }} Events</span>
+        <div class="border-b border-gray-100 p-6 bg-gray-50/50 z-10 flex flex-col gap-4">
+          <div class="flex items-center justify-between">
+            <h2 class="font-bold text-xl flex items-center gap-3 text-gray-800">
+              <mat-icon class="text-gray-500">{{ showArchived() ? 'archive' : 'history' }}</mat-icon>
+              {{ showArchived() ? 'Archived Events' : 'Incident Log' }}
+            </h2>
+            <span class="bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1 rounded-full">{{ displayEvents().length }}</span>
+          </div>
+          
+          <div class="flex items-center gap-2">
+            <button mat-stroked-button (click)="toggleArchived()" class="flex-grow rounded-xl">
+              <div class="flex items-center justify-center gap-2">
+                <mat-icon>{{ showArchived() ? 'arrow_back' : 'archive' }}</mat-icon>
+                <span>{{ showArchived() ? 'Back to Log' : 'View Archive' }}</span>
+              </div>
+            </button>
+            @if (showArchived() && archivedEvents().length > 0) {
+              <button mat-icon-button color="warn" (click)="clearArchive()" title="Clear Archive">
+                <mat-icon>delete_sweep</mat-icon>
+              </button>
+            }
+          </div>
         </div>
         
         <div class="flex-grow overflow-y-auto p-0 bg-white">
-          @if (events().length === 0) {
+          @if (displayEvents().length === 0) {
             <div class="h-full flex flex-col items-center justify-center text-gray-400 p-8 text-center">
-              <mat-icon class="text-6xl mb-4 opacity-30">check_circle_outline</mat-icon>
-              <p class="text-lg font-medium text-gray-500">No incidents detected yet.</p>
-              <p class="text-sm mt-2 opacity-75">The AI is actively monitoring the feed.</p>
+              <mat-icon class="text-6xl mb-4 opacity-30">{{ showArchived() ? 'archive' : 'check_circle_outline' }}</mat-icon>
+              <p class="text-lg font-medium text-gray-500">
+                {{ showArchived() ? 'Archive is empty.' : 'No incidents detected yet.' }}
+              </p>
+              <p class="text-sm mt-2 opacity-75">
+                {{ showArchived() ? 'Old events will appear here.' : 'The AI is actively monitoring the feed.' }}
+              </p>
             </div>
           } @else {
             <div class="flex flex-col">
-              @for (event of events(); track event.id) {
+              @for (event of displayEvents(); track event.id) {
                 <div class="p-5 border-b border-gray-50 hover:bg-gray-50 transition-colors flex gap-5 group">
                   <div class="relative w-24 h-24 flex-shrink-0">
                     <img [src]="event.imageUrl" class="w-full h-full object-cover rounded-xl shadow-sm border border-gray-200 group-hover:shadow-md transition-shadow" alt="Incident snapshot">
